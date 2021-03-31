@@ -102,7 +102,7 @@ impl<A, Args,> Fn<Args> for Drop<A,>
   extern "rust-call" fn call(&self, _: Args,) -> Self::Output { self.0.clone() }
 }
 
-/// A function which wraps the input in a `Drop`.
+/// A function which wraps the input in a [`Drop`](self::Drop).
 /// 
 /// ```
 /// use combinators::*;
@@ -366,6 +366,121 @@ impl<T,> Fn<(Result<T::Ok, T::Error>,)> for FromTry<T,>
   where T: Try, {
   #[inline]
   extern "rust-call" fn call(&self, (r,): (Result<T::Ok, T::Error>,),) -> Self::Output { Self::from_try(r,) }
+}
+
+/// A function which pairs its internal value with the input.
+/// 
+/// ```
+/// use combinators::*;
+/// 
+/// assert_eq!(Join(42)("dropped"), (42, "dropped"));
+/// ```
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default, Debug,)]
+pub struct Join<A,>(pub A,);
+
+impl<A,> Join<A,> {
+  /// Constructs a new `Join` from `a`.
+  #[inline]
+  pub const fn new(a: A,) -> Self { Join(a,) }
+}
+
+impl<A, B,> FnOnce<(B,)> for Join<A,> {
+  type Output = (A, B,);
+
+  #[inline]
+  extern "rust-call" fn call_once(self, (b,): (B,),) -> Self::Output { (self.0, b,) }
+}
+
+impl<A, B,> FnMut<(B,)> for Join<A,>
+  where A: Clone, {
+  #[inline]
+  extern "rust-call" fn call_mut(&mut self, (b,): (B,),) -> Self::Output { (self.0.clone(), b,) }
+}
+
+impl<A, B,> Fn<(B,)> for Join<A,>
+  where A: Clone, {
+  #[inline]
+  extern "rust-call" fn call(&self, (b,): (B,),) -> Self::Output { (self.0.clone(), b,) }
+}
+
+/// A function which wraps two inputs in a tuple or one input in a [`Join`](self::Join).
+/// 
+/// ```
+/// use combinators::*;
+/// 
+/// assert_eq!(Pair(42)("dropped"), (42, "dropped"));
+/// assert_eq!(Pair(42, "dropped"), (42, "dropped"));
+/// ```
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default, Debug,)]
+pub struct Pair;
+
+impl Pair {
+  /// Wraps the input in a `Join`.
+  #[inline]
+  pub const fn pair<A,>(a: A,) -> Join<A,> { Join(a,) }
+}
+
+impl<A,> FnOnce<(A,)> for Pair {
+  type Output = Join<A,>;
+
+  #[inline]
+  extern "rust-call" fn call_once(self, (a,): (A,),) -> Self::Output { Join(a,) }
+}
+
+impl<A,> FnMut<(A,)> for Pair {
+  #[inline]
+  extern "rust-call" fn call_mut(&mut self, (a,): (A,),) -> Self::Output { Join(a,) }
+}
+
+impl<A,> Fn<(A,)> for Pair {
+  #[inline]
+  extern "rust-call" fn call(&self, (a,): (A,),) -> Self::Output { Join(a,) }
+}
+
+impl<A, B,> FnOnce<(A, B,)> for Pair {
+  type Output = (A, B,);
+
+  #[inline]
+  extern "rust-call" fn call_once(self, t: (A, B,),) -> Self::Output { t }
+}
+
+impl<A, B,> FnMut<(A, B,)> for Pair {
+  #[inline]
+  extern "rust-call" fn call_mut(&mut self, t: (A, B,),) -> Self::Output { t }
+}
+
+impl<A, B,> Fn<(A, B,)> for Pair {
+  #[inline]
+  extern "rust-call" fn call(&self, t: (A, B,),) -> Self::Output { t }
+}
+
+/// A function which wraps its inputs in a tuple.
+/// 
+/// ```
+/// use combinators::*;
+/// 
+/// assert_eq!(Tuple(1), (1,));
+/// assert_eq!(Tuple(1, 2), (1, 2));
+/// assert_eq!(Tuple(1, 2, 3), (1, 2, 3));
+/// ```
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default, Debug,)]
+pub struct Tuple;
+
+impl<Args,> FnOnce<Args> for Tuple {
+  type Output = Args;
+
+  #[inline]
+  extern "rust-call" fn call_once(self, args: Args,) -> Self::Output { args }
+}
+
+impl<Args,> FnMut<Args> for Tuple {
+  #[inline]
+  extern "rust-call" fn call_mut(&mut self, args: Args,) -> Self::Output { args }
+}
+
+impl<Args,> Fn<Args> for Tuple {
+  #[inline]
+  extern "rust-call" fn call(&self, args: Args,) -> Self::Output { args }
 }
 
 fn _assert_coerce_unsized(a: TryMap<&i32,>, b: TryMapErr<&i32,>,) {
