@@ -20,7 +20,7 @@ use core::{
 /// A function which returns the input.
 /// 
 /// ```
-/// use combinators::*;
+/// use combinators_rs::*;
 /// 
 /// assert_eq!(Identity(42), 42);
 /// ```
@@ -58,7 +58,7 @@ impl<A,> Fn<(A,)> for Identity {
 /// A function which ignores the inputs and returns the inner value.
 /// 
 /// ```
-/// use combinators::*;
+/// use combinators_rs::*;
 /// 
 /// assert_eq!(Drop(42)("dropped"), 42);
 /// ```
@@ -105,7 +105,7 @@ impl<A, Args,> Fn<Args> for Drop<A,>
 /// A function which wraps the input in a [`Drop`](self::Drop).
 /// 
 /// ```
-/// use combinators::*;
+/// use combinators_rs::*;
 /// 
 /// assert_eq!(Keep(42)("dropped"), 42);
 /// ```
@@ -139,7 +139,7 @@ impl<A,> Fn<(A,)> for Keep {
 /// [`Try`](core::ops::Try) value.
 /// 
 /// ```
-/// use combinators::*;
+/// use combinators_rs::*;
 /// 
 /// assert_eq!(Compose::new(Keep, Keep)(42)("dropped1")("dropped2"), 42);
 /// ```
@@ -192,7 +192,7 @@ impl<F, G, A, B, C,> Fn<(A,)> for Compose<F, G,>
 /// [`Try`](core::ops::Try) value.
 /// 
 /// ```
-/// use combinators::*;
+/// use combinators_rs::*;
 /// 
 /// assert_eq!(TryMap(|x| x * 2)(Some(21)).unwrap(), 42);
 /// ```
@@ -249,7 +249,7 @@ impl<A, B,> CoerceUnsized<TryMap<B,>> for TryMap<A,>
 /// [`Try`](core::ops::Try) value.
 /// 
 /// ```
-/// use combinators::*;
+/// use combinators_rs::*;
 /// 
 /// assert_eq!(TryMapErr(|x| x * 2)(Err(21)), Err(42) as Result<(), i32>);
 /// ```
@@ -305,7 +305,7 @@ impl<A, B,> CoerceUnsized<TryMapErr<B,>> for TryMapErr<A,>
 /// A function which maps from a `Result` into a [`Try`](core::ops::Try) type.
 /// 
 /// ```
-/// use combinators::*;
+/// use combinators_rs::*;
 /// 
 /// assert_eq!(FromTry::<Option<i32>>::INIT(Ok(42)), Some(42));
 /// ```
@@ -371,7 +371,7 @@ impl<T,> Fn<(Result<T::Ok, T::Error>,)> for FromTry<T,>
 /// A function which pairs its internal value with the input.
 /// 
 /// ```
-/// use combinators::*;
+/// use combinators_rs::*;
 /// 
 /// assert_eq!(Join(42)("dropped"), (42, "dropped"));
 /// ```
@@ -406,7 +406,7 @@ impl<A, B,> Fn<(B,)> for Join<A,>
 /// A function which wraps two inputs in a tuple or one input in a [`Join`](self::Join).
 /// 
 /// ```
-/// use combinators::*;
+/// use combinators_rs::*;
 /// 
 /// assert_eq!(Pair(42)("dropped"), (42, "dropped"));
 /// assert_eq!(Pair(42, "dropped"), (42, "dropped"));
@@ -457,7 +457,7 @@ impl<A, B,> Fn<(A, B,)> for Pair {
 /// A function which wraps its inputs in a tuple.
 /// 
 /// ```
-/// use combinators::*;
+/// use combinators_rs::*;
 /// 
 /// assert_eq!(Tuple(1), (1,));
 /// assert_eq!(Tuple(1, 2), (1, 2));
