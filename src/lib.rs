@@ -8,6 +8,7 @@
 #![feature(
   fn_traits, unboxed_closures, const_ptr_read, const_maybe_uninit_as_ptr,
   const_refs_to_cell, const_fn_fn_ptr_basics, try_trait, coerce_unsized,
+  const_fn,
 )]
 
 use core::{
@@ -135,8 +136,7 @@ impl<A,> Fn<(A,)> for Keep {
   extern "rust-call" fn call(&self, (a,): (A,),) -> Self::Output { Drop(a,) }
 }
 
-/// A function which maps the [`Ok`](core::ops::Try::Ok) variant of a
-/// [`Try`](core::ops::Try) value.
+/// A function which uses the output of one function as the input to a second function.
 /// 
 /// ```
 /// use combinators_rs::*;
@@ -194,7 +194,7 @@ impl<F, G, A, B, C,> Fn<(A,)> for Compose<F, G,>
 /// ```
 /// use combinators_rs::*;
 /// 
-/// assert_eq!(TryMap(|x| x * 2)(Some(21)).unwrap(), 42);
+/// assert_eq!(TryMap(|x| x * 2)(Some(21)), Ok(42));
 /// ```
 #[repr(transparent,)]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default, Debug,)]
@@ -242,6 +242,145 @@ impl<F, T, A,> Fn<(T,)> for TryMap<F,>
 }
 
 impl<A, B,> CoerceUnsized<TryMap<B,>> for TryMap<A,>
+  where A: CoerceUnsized<B,> + ?Sized,
+    B: ?Sized, {}
+
+/// A function which applies the [`Ok`](core::ops::Try::Ok) variant of a value to the
+/// [`Ok`](core::ops::Try::Ok) variant of another value.
+/// 
+/// ```
+/// use combinators_rs::*;
+/// 
+/// assert_eq!(TryApply(Some(|x| x * 2))(Some(21)), Ok(42));
+/// ```
+#[repr(transparent,)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug,)]
+pub struct TryApply<F,>(pub F,)
+  where F: ?Sized,;
+
+impl<F,> TryApply<F,>
+  where F: Try, {
+  /// Constructs a new `TryApply` from `f`.
+  #[inline]
+  pub const fn new(f: F,) -> Self { TryApply(f,) }
+  /// Returns the inner value.
+  #[inline]
+  pub const fn into_inner(self,) -> F {
+    use core::{ptr, mem::MaybeUninit,};
+
+    unsafe { ptr::read(MaybeUninit::new(self,).as_ptr() as *const Self as *const F,) }
+  }
+  /// Maps the inner value.
+  #[inline]
+  pub fn map<H, G,>(self, map: G,) -> TryApply<H,>
+    where H: Try,
+      G: FnOnce(F,) -> H, { TryApply::new(map(self.0,),) }
+}
+
+impl<F, A, B,> FnOnce<(A,)> for TryApply<F,>
+  where F: Try,
+    A: Try,
+    F::Ok: FnOnce(A::Ok,) -> B,
+    A::Error: From<F::Error>, {
+  type Output = Result<B, A::Error>;
+
+  extern "rust-call" fn call_once(self, (a,): (A,),) -> Self::Output { Ok(self.0?(a?,),) }
+}
+
+impl<F, A, B,> FnMut<(A,)> for TryApply<F,>
+  where F: Try + Clone,
+    A: Try,
+    F::Ok: FnOnce(A::Ok,) -> B,
+    A::Error: From<F::Error>, {
+  extern "rust-call" fn call_mut(&mut self, (a,): (A,),) -> Self::Output { Ok(self.0.clone()?(a?,),) }
+}
+
+impl<F, A, B,> Fn<(A,)> for TryApply<F,>
+  where F: Try + Clone,
+    A: Try,
+    F::Ok: FnOnce(A::Ok,) -> B,
+    A::Error: From<F::Error>, {
+  extern "rust-call" fn call(&self, (a,): (A,),) -> Self::Output { Ok(self.0.clone()?(a?,),) }
+}
+
+impl<A, B,> CoerceUnsized<TryApply<B,>> for TryApply<A,>
+  where A: CoerceUnsized<B,> + ?Sized,
+    B: ?Sized, {}
+
+/// A function which applies the [`Error`](core::ops::Try::Error) variant of a value to
+/// the [`Error`](core::ops::Try::Error) variant of another value.
+/// 
+/// ```
+/// use combinators_rs::*;
+/// 
+/// assert_eq!(TryApplyErr(Err(|x| x * 2))(Err(21)), Err(42) as Result<(), i32>);
+/// ```
+#[repr(transparent,)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug,)]
+pub struct TryApplyErr<F,>(pub F,)
+  where F: ?Sized,;
+
+impl<F,> TryApplyErr<F,>
+  where F: Try, {
+  /// Constructs a new `TryApplyErr` from `f`.
+  #[inline]
+  pub const fn new(f: F,) -> Self { TryApplyErr(f,) }
+  /// Returns the inner value.
+  #[inline]
+  pub const fn into_inner(self,) -> F {
+    use core::{ptr, mem::MaybeUninit,};
+
+    unsafe { ptr::read(MaybeUninit::new(self,).as_ptr() as *const Self as *const F,) }
+  }
+  /// Maps the inner value.
+  #[inline]
+  pub fn map<H, G,>(self, map: G,) -> TryApplyErr<H,>
+    where H: Try,
+      G: FnOnce(F,) -> H, { TryApplyErr::new(map(self.0,),) }
+}
+
+impl<F, A, B,> FnOnce<(A,)> for TryApplyErr<F,>
+  where F: Try,
+    A: Try,
+    F::Error: FnOnce(A::Error,) -> B,
+    A::Ok: From<F::Ok>, {
+  type Output = Result<A::Ok, B>;
+
+  extern "rust-call" fn call_once(self, (a,): (A,),) -> Self::Output {
+    match self.0.into_result() {
+      Ok(x) => Ok(x.into()),
+      Err(f) => a.into_result().map_err(f,),
+    }
+  }
+}
+
+impl<F, A, B,> FnMut<(A,)> for TryApplyErr<F,>
+  where F: Try + Clone,
+    A: Try,
+    F::Error: FnOnce(A::Error,) -> B,
+    A::Ok: From<F::Ok>, {
+  extern "rust-call" fn call_mut(&mut self, (a,): (A,),) -> Self::Output {
+    match self.0.clone().into_result() {
+      Ok(x) => Ok(x.into()),
+      Err(f) => a.into_result().map_err(f,),
+    }
+  }
+}
+
+impl<F, A, B,> Fn<(A,)> for TryApplyErr<F,>
+  where F: Try + Clone,
+    A: Try,
+    F::Error: FnOnce(A::Error,) -> B,
+    A::Ok: From<F::Ok>, {
+  extern "rust-call" fn call(&self, (a,): (A,),) -> Self::Output {
+    match self.0.clone().into_result() {
+      Ok(x) => Ok(x.into()),
+      Err(f) => a.into_result().map_err(f,),
+    }
+  }
+}
+
+impl<A, B,> CoerceUnsized<TryApplyErr<B,>> for TryApplyErr<A,>
   where A: CoerceUnsized<B,> + ?Sized,
     B: ?Sized, {}
 
