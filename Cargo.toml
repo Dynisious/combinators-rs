@@ -1,6 +1,6 @@
 [package]
 name = "combinators-rs"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["DMorgan <daniel.bechaz@gmail.com>"]
 edition = "2018"
 description = "A library of combinator functions with named types"
