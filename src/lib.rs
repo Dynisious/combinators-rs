@@ -305,6 +305,165 @@ impl<A, B,> CoerceUnsized<TryMapErr<B,>> for TryMapErr<A,>
   where A: CoerceUnsized<B,> + ?Sized,
     B: ?Sized, {}
 
+/// A function which wraps the argument in a [`TryAndThen`](self::TryAndThen).
+/// 
+/// ```
+/// use combinators_rs::*;
+/// 
+/// assert_eq!(TryAndThen::INIT(|x| Some(x * 2))(Some(21)), Some(42));
+/// ```
+pub type AndThen<F,> = impl Fn(F,) -> TryAndThen<F,> + Clone + Copy;
+
+/// A function which either maps the [`Ok`](core::ops::Try::Ok) variant of a
+/// [`Try`](core::ops::Try) value or returns the error.
+/// 
+/// ```
+/// use combinators_rs::*;
+/// 
+/// assert_eq!(TryAndThen(|x| Some(x * 2))(Some(21)), Some(42));
+/// ```
+#[repr(transparent,)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default, Debug,)]
+pub struct TryAndThen<F,>(pub F,)
+  where F: ?Sized,;
+
+impl<F,> TryAndThen<F,> {
+  /// The `TryAndThen` constructor.
+  pub const INIT: AndThen<F,> = TryAndThen;
+
+  /// Constructs a new `TryAndThen` from `f`.
+  #[inline]
+  pub const fn new(f: F,) -> Self { TryAndThen(f,) }
+  /// Returns the inner value.
+  #[inline]
+  pub const fn into_inner(self,) -> F {
+    use core::{ptr, mem::MaybeUninit,};
+
+    unsafe { ptr::read(MaybeUninit::new(self,).as_ptr() as *const Self as *const F,) }
+  }
+  /// Maps the inner value.
+  #[inline]
+  pub fn map<H, G,>(self, map: G,) -> TryAndThen<H,>
+    where G: FnOnce(F,) -> H, { TryAndThen::new(map(self.0,),) }
+}
+
+impl<F, T, A,> FnOnce<(T,)> for TryAndThen<F,>
+  where F: FnOnce(T::Ok,) -> A,
+    T: Try,
+    A: Try,
+    A::Error: From<T::Error>, {
+  type Output = A;
+
+  extern "rust-call" fn call_once(self, (t,): (T,),) -> Self::Output { (self.0)(t?,) }
+}
+
+impl<F, T, A,> FnMut<(T,)> for TryAndThen<F,>
+  where F: FnMut(T::Ok,) -> A,
+    T: Try,
+    A: Try,
+    A::Error: From<T::Error>, {
+  extern "rust-call" fn call_mut(&mut self, (t,): (T,),) -> Self::Output { (&mut self.0)(t?,) }
+}
+
+impl<F, T, A,> Fn<(T,)> for TryAndThen<F,>
+  where F: Fn(T::Ok,) -> A,
+    T: Try,
+    A: Try,
+    A::Error: From<T::Error>, {
+  extern "rust-call" fn call(&self, (t,): (T,),) -> Self::Output { (&self.0)(t?,) }
+}
+
+impl<A, B,> CoerceUnsized<TryAndThen<B,>> for TryAndThen<A,>
+  where A: CoerceUnsized<B,> + ?Sized,
+    B: ?Sized, {}
+
+/// A function which wraps the argument in a [`TryOrElse`](self::TryOrElse).
+/// 
+/// ```
+/// use combinators_rs::*;
+/// 
+/// assert_eq!(TryOrElse::INIT(|_| Some(42))(None as Option<i32>), Some(42));
+/// ```
+pub type OrElse<F,> = impl Fn(F,) -> TryOrElse<F,> + Clone + Copy;
+
+/// A function which either maps the [`Error`](core::ops::Try::Error) variant of a
+/// [`Try`](core::ops::Try) value or returns the success.
+/// 
+/// ```
+/// use combinators_rs::*;
+/// 
+/// assert_eq!(TryOrElse(|_| Some(42))(None as Option<i32>), Some(42));
+/// ```
+#[repr(transparent,)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default, Debug,)]
+pub struct TryOrElse<F,>(pub F,)
+  where F: ?Sized,;
+
+impl<F,> TryOrElse<F,> {
+  /// The `TryOrElse` constructor.
+  pub const INIT: OrElse<F,> = TryOrElse;
+
+  /// Constructs a new `TryOrElse` from `f`.
+  #[inline]
+  pub const fn new(f: F,) -> Self { TryOrElse(f,) }
+  /// Returns the inner value.
+  #[inline]
+  pub const fn into_inner(self,) -> F {
+    use core::{ptr, mem::MaybeUninit,};
+
+    unsafe { ptr::read(MaybeUninit::new(self,).as_ptr() as *const Self as *const F,) }
+  }
+  /// Maps the inner value.
+  #[inline]
+  pub fn map<H, G,>(self, map: G,) -> TryOrElse<H,>
+    where G: FnOnce(F,) -> H, { TryOrElse::new(map(self.0,),) }
+}
+
+impl<F, T, A,> FnOnce<(T,)> for TryOrElse<F,>
+  where F: FnOnce(T::Error,) -> A,
+    T: Try,
+    A: Try,
+    A::Ok: From<T::Ok>, {
+  type Output = A;
+
+  extern "rust-call" fn call_once(self, (t,): (T,),) -> Self::Output {
+    match t.into_result() {
+      Ok(v) => A::from_ok(v.into(),),
+      Err(e) => (self.0)(e,),
+    }
+  }
+}
+
+impl<F, T, A,> FnMut<(T,)> for TryOrElse<F,>
+  where F: FnMut(T::Error,) -> A,
+    T: Try,
+    A: Try,
+    A::Ok: From<T::Ok>, {
+  extern "rust-call" fn call_mut(&mut self, (t,): (T,),) -> Self::Output {
+    match t.into_result() {
+      Ok(v) => A::from_ok(v.into(),),
+      Err(e) => (self.0)(e,),
+    }
+  }
+}
+
+impl<F, T, A,> Fn<(T,)> for TryOrElse<F,>
+  where F: Fn(T::Error,) -> A,
+    T: Try,
+    A: Try,
+    A::Ok: From<T::Ok>, {
+  extern "rust-call" fn call(&self, (t,): (T,),) -> Self::Output {
+    match t.into_result() {
+      Ok(v) => A::from_ok(v.into(),),
+      Err(e) => (self.0)(e,),
+    }
+  }
+}
+
+impl<A, B,> CoerceUnsized<TryOrElse<B,>> for TryOrElse<A,>
+  where A: CoerceUnsized<B,> + ?Sized,
+    B: ?Sized, {}
+
 /// A function which maps from a `Result` into a [`Try`](core::ops::Try) type.
 /// 
 /// ```
@@ -486,7 +645,8 @@ impl<Args,> Fn<Args> for Tuple {
   extern "rust-call" fn call(&self, args: Args,) -> Self::Output { args }
 }
 
-fn _assert_coerce_unsized(a: TryMap<&i32,>, b: TryMapErr<&i32,>,) {
+fn _assert_coerce_unsized(a: TryMap<&i32,>, b: TryMapErr<&i32,>, c: TryAndThen<&i32,>,) {
   let _: TryMap<&dyn Send,> = a;
   let _: TryMapErr<&dyn Send,> = b;
+  let _: TryAndThen<&dyn Send,> = c;
 }
